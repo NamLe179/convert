@@ -84,6 +84,9 @@ export function xmlToString(element: Element): string {
 }
 
 export function parseFromString(xmlString: string): Element {
+  if (typeof window === 'undefined') {
+    throw new Error('parseFromString can only be used in browser environment');
+  }
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlString, "text/xml");
   return doc.documentElement;
