@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import {
   downloadAsKMZ,
   downloadAsMSDL,
@@ -43,15 +44,24 @@ export type ScenarioAction =
  * ===================== */
 
 export function useScenarioActions(mlMap?: maplibregl.Map) {
-  const { msdl, loadScenario } = useScenarioStore();
-  const dialogStore = useDialogStore();
-  const expandedStore = useExpandedStore();
-  const selectStore = useSelectStore();
+  const msdl = useScenarioStore((state) => state.msdl);
+  const loadScenario = useScenarioStore((state) => state.loadScenario);
+  
+  const setCreateMSDLDialog = useDialogStore((state) => state.setCreateMSDLDialog);
+  const setUrlDialog = useDialogStore((state) => state.setUrlDialog);
+  const setAssociationDialog = useDialogStore((state) => state.setAssociationDialog);
+  
+  const activeItem = useSelectStore((state) => state.activeItem);
+  
+  const openSideItems = useExpandedStore((state) => state.openSideItems);
+  const expandedItems = useExpandedStore((state) => state.expandedItems);
+  const setOpenSideItems = useExpandedStore((state) => state.setOpenSideItems);
+  const setExpandedItems = useExpandedStore((state) => state.setExpandedItems);
 
-  const dispatchAction = async (action: ScenarioAction) => {
+  const dispatchAction = useCallback(async (action: ScenarioAction) => {
     switch (action) {
       case "CreateNewMSDL": {
-        dialogStore.setCreateMSDLDialog(true);
+        setCreateMSDLDialog(true);
         break;
       }
 
@@ -89,37 +99,35 @@ export function useScenarioActions(mlMap?: maplibregl.Map) {
       }
 
       case "LoadFromUrl": {
-        dialogStore.setUrlDialog(true);
+        setUrlDialog(true);
         break;
       }
 
       case "EditAssociations": {
-        dialogStore.setAssociationDialog(true);
+        setAssociationDialog(true);
         break;
       }
 
       case "LocateInOrbat": {
-        if (!msdl || !selectStore.activeItem) return;
+        if (!msdl || !activeItem) return;
 
         const { forceSide, hierarchy } =
-          msdl.getItemHierarchy(selectStore.activeItem, {
+          msdl.getItemHierarchy(activeItem, {
             includeItem: true,
           });
 
         const sideToOpen = forceSide[0];
         if (
           sideToOpen &&
-          !expandedStore.openSideItems.includes(
+          !openSideItems.includes(
             sideToOpen.objectHandle,
           )
         ) {
-          expandedStore.openSideItems.push(
-            sideToOpen.objectHandle,
-          );
+          setOpenSideItems([...openSideItems, sideToOpen.objectHandle]);
         }
 
         const expanded = new Set(
-          expandedStore.expandedItems.get(
+          expandedItems.get(
             sideToOpen.objectHandle,
           ) ?? [],
         );
@@ -129,15 +137,17 @@ export function useScenarioActions(mlMap?: maplibregl.Map) {
           expanded.add(item.objectHandle);
         }
 
-        expandedStore.expandedItems.set(
+        const newExpandedItems = new Map(expandedItems);
+        newExpandedItems.set(
           sideToOpen.objectHandle,
           [...expanded],
         );
+        setExpandedItems(newExpandedItems);
 
         // wait for DOM update
         setTimeout(() => {
           const el = document.getElementById(
-            `oi-${selectStore.activeItem?.objectHandle}`,
+            `oi-${activeItem?.objectHandle}`,
           );
           if (el) {
             el.scrollIntoView({
@@ -147,7 +157,7 @@ export function useScenarioActions(mlMap?: maplibregl.Map) {
             triggerFlash(el);
           } else {
             console.warn(
-              `Element oi-${selectStore.activeItem?.objectHandle} not found`,
+              `Element oi-${activeItem?.objectHandle} not found`,
             );
           }
         }, 250);
@@ -156,14 +166,14 @@ export function useScenarioActions(mlMap?: maplibregl.Map) {
       }
 
       case "CollapseOrbat": {
-        expandedStore.openSideItems = [];
-        expandedStore.expandedItems.clear();
+        setOpenSideItems([]);
+        setExpandedItems(new Map());
         break;
       }
 
       case "ZoomToActiveItem": {
-        if (!mlMap || !msdl || !selectStore.activeItem) return;
-        flyToItem(selectStore.activeItem, mlMap);
+        if (!mlMap || !msdl || !activeItem) return;
+        flyToItem(activeItem, mlMap);
         break;
       }
 
@@ -171,7 +181,7 @@ export function useScenarioActions(mlMap?: maplibregl.Map) {
         console.error(`Unknown action: ${action}`);
       }
     }
-  };
+  }, [msdl, loadScenario, setCreateMSDLDialog, setUrlDialog, setAssociationDialog, activeItem, openSideItems, expandedItems, setOpenSideItems, setExpandedItems, mlMap]);
 
   return { dispatchAction };
 }

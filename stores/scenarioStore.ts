@@ -101,6 +101,9 @@ function xmlToString(element: Element): string {
 }
 
 function parseFromString(xmlString: string): Element {
+  if (typeof window === 'undefined') {
+    throw new Error('parseFromString can only be used in browser environment');
+  }
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlString, "text/xml");
   return doc.documentElement;
@@ -369,8 +372,12 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
         return;
       }
       
-      if (disposition) {
-        item.disposition = disposition;
+      if (disposition && item.disposition) {
+        // Ghép nối các thuộc tính của disposition
+        Object.assign(item.disposition, disposition);
+      } else if (disposition) {
+        // assign mới nếu chưa có disposition
+        item.disposition = disposition as any;
       }
       
       get().triggerUpdate();
@@ -439,12 +446,32 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
       const { msdl } = get();
       if (!msdl) return;
       
+      // Đảm bảo phải có 1 force side trước khi thêm unit
+      if (msdl.sides.length === 0) {
+        toast.error("Please create a Force Side first");
+        return;
+      }
+      
       const item = Unit.create();
-      item.disposition = UnitDisposition.fromModel({ location: newLocation });
       item.name = newUnit?.name ?? "New unit";
       item.sidc = "SFGPU----------";
-      item.symbolIdentifier = item.sidc;
-      if (msdl.primarySide) item.setForceRelation(msdl.primarySide);
+      item.symbolIdentifier = "SFGPU----------";
+      
+      // Đặt disposition với location
+      const disposition = UnitDisposition.create();
+      disposition.location = newLocation as any;
+      item.disposition = disposition;
+      
+      // Đặt force relation đến primary side hoặc side đầu tiên có sẵn
+      const targetSide = msdl.primarySide || msdl.sides[0];
+      if (targetSide) {
+        try {
+          item.setForceRelation(targetSide);
+        } catch (e) {
+          console.warn("Could not set force relation:", e);
+        }
+      }
+      
       msdl.addUnit(item);
       
       get().triggerUpdate();
@@ -467,10 +494,15 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
       if (!msdl) return;
       
       const item = EquipmentItem.create();
-      item.disposition = EquipmentItemDisposition.fromModel({ location: newLocation });
       item.name = newEquipment?.name ?? "New equipment item";
       item.sidc = "SFGPE-----M----";
-      item.symbolIdentifier = item.sidc;
+      item.symbolIdentifier = "SFGPE-----M----";
+      
+      // Đặt disposition với location
+      const disposition = EquipmentItemDisposition.create();
+      disposition.location = newLocation as any;
+      item.disposition = disposition;
+      
       msdl.addEquipmentItem(item);
       
       get().triggerUpdate();
@@ -502,6 +534,11 @@ export const useScenarioStore = create<ScenarioState>((set, get) => ({
       const side = ForceSide.create();
       side.updateFromObject(newSide);
       msdl.addForceSide(side);
+      
+      // Đặt làm primary side nếu chưa có primary side nào
+      if (!msdl.primarySide) {
+        msdl.primarySide = side;
+      }
       
       get().triggerUpdate();
       useLayerStore.getState().addLayer(side.objectHandle);
@@ -715,3 +752,12 @@ export const useScenarioSelectors = () => {
     isNETN: msdl?.isNETN ?? false,
   };
 };
+
+export const useCanUndo = () => 
+  useScenarioStore((state) => state.undoStack.length > 0);
+
+export const useCanRedo = () => 
+  useScenarioStore((state) => state.redoStack.length > 0);
+
+export const useIsNETN = () => 
+  useScenarioStore((state) => state.msdl?.isNETN ??  false);

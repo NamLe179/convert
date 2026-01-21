@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import fuzzysort from "fuzzysort";
 import { groupBy, htmlTagEscape } from "@/lib/utils-msdl";
 import { useSymbologyData } from "@/hooks/symbolDataB";
@@ -25,47 +26,56 @@ export interface SymbolSearchResult {
 export function useSymbologySearch(sidValue: string) {
   const { symbology } = useSymbologyData();
 
-  function searchMainIcons(query: string): SymbolSearchResult[] {
-    if (!query || !symbology?.length) return [];
+  const search = useCallback(
+    (query: string) => {
+      function searchMainIcons(q: string): SymbolSearchResult[] {
+        if (!q || !symbology?.length) return [];
 
-    const hits = fuzzysort.go(query, symbology, {
-      key: "text",
-      limit: 10,
-    });
+        const hits = fuzzysort.go(q, symbology, {
+          key: "text",
+          limit: 10,
+        });
 
-    return hits.map((e, index) => {
-      const { obj, ...rest } = e;
+        return hits.map((e, index) => {
+          const { obj, ...rest } = e;
+
+          return {
+            text: obj.text,
+            name: obj.name,
+            score: e.score,
+            index,
+            highlight:
+              fuzzysort.highlight({
+                ...rest,
+                target: htmlTagEscape(rest.target),
+              }) ?? "",
+            sidc:
+              obj.codingscheme +
+              sidValue +
+              obj.battledimension +
+              "-" +
+              obj.functionid +
+              "-----",
+            category: obj.category,
+          } as SymbolSearchResult;
+        });
+      }
+
+      const mainIconHits = searchMainIcons(query);
+      
+      // Lấy kết quả dạng Map từ hàm groupBy
+      const groupsMap = groupBy(mainIconHits, "category");
+
+      // Chuyển đổi Map thành Plain Object (Record)
+      const groupsObj = Object.fromEntries(groupsMap);
 
       return {
-        text: obj.text,
-        name: obj.name,
-        score: e.score,
-        index,
-        highlight:
-          fuzzysort.highlight({
-            ...rest,
-            target: htmlTagEscape(rest.target),
-          }) ?? "",
-        sidc:
-          obj.codingscheme +
-          sidValue +
-          obj.battledimension +
-          "-" +
-          obj.functionid +
-          "-----",
-        category: obj.category,
+        numberOfHits: mainIconHits.length,
+        groups: groupsObj as Record<string, SymbolSearchResult[]>, // Ép kiểu về Record để khớp với State
       };
-    });
-  }
-
-  function search(query: string) {
-    const mainIconHits = searchMainIcons(query);
-
-    return {
-      numberOfHits: mainIconHits.length,
-      groups: groupBy(mainIconHits, "category"),
-    };
-  }
+    },
+    [symbology, sidValue]
+  );
 
   return { search };
 }

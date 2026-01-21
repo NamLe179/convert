@@ -43,17 +43,17 @@ export class SidcB implements SicElementsB {
   }
 
   toString() {
-    return (
-      this.codingScheme +
-      this.affiliation +
-      this.battleDimension +
-      this.status +
-      this.functionId +
-      this.modifier1 +
-      this.modifier2 +
-      this.echelon +
-      this.context +
-      "-"
-    );
+    // Đảm bảo độ dài sidc đúng 15 ký tự
+    const cs = (this.codingScheme || "-").padEnd(1, "-").substring(0, 1);
+    const af = (this.affiliation || "-").padEnd(1, "-").substring(0, 1);
+    const bd = (this.battleDimension || "-").padEnd(1, "-").substring(0, 1);
+    const st = (this.status || "P").padEnd(1, "-").substring(0, 1);
+    const fi = (this.functionId || "------").padEnd(6, "-").substring(0, 6);
+    const m1 = (this.modifier1 || "-").padEnd(1, "-").substring(0, 1);
+    const m2 = (this.modifier2 || "-").padEnd(1, "-").substring(0, 1);
+    const ec = (this.echelon || "-").padEnd(1, "-").substring(0, 1);
+    const ct = (this.context || "-").padEnd(1, "-").substring(0, 1);
+    
+    return cs + af + bd + st + fi + m1 + m2 + ec + ct + "-";
   }
 }
