@@ -87,6 +87,7 @@ export function useSidcModal() {
     setInitialSidcModalValue,
     setSidcModalTitle,
     setInitialTab,
+    setShowSidcModal: setIsRevealed,
 
     // actions
     getModalSidc,

@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useMemo } from "react";
 import { useScenarioStore } from "@/stores/scenarioStore";
 import fuzzysort from "fuzzysort";
 import { groupBy, htmlTagEscape } from "@/lib/utils-msdl";
@@ -104,7 +105,7 @@ const actionItems: ActionItem[] = [
 export function useScenarioSearch() {
   const msdl = useScenarioStore((s) => s.msdl);
 
-  function searchUnits(query: string): UnitSearchResult[] {
+  const searchUnits = useCallback((query: string): UnitSearchResult[] => {
     const q = query.trim();
     if (!q || !msdl) return [];
 
@@ -129,9 +130,9 @@ export function useScenarioSearch() {
           target: htmlTagEscape(u.target),
         }) ?? "",
     }));
-  }
+  }, [msdl]);
 
-  function searchEquipmentItems(query: string): EquipmentSearchResult[] {
+  const searchEquipmentItems = useCallback((query: string): EquipmentSearchResult[] => {
     const q = query.trim();
     if (!q || !msdl) return [];
 
@@ -156,9 +157,9 @@ export function useScenarioSearch() {
           target: htmlTagEscape(u.target),
         }) ?? "",
     }));
-  }
+  }, [msdl]);
 
-  function searchActions(query: string): ActionSearchResult[] {
+  const searchActions = useCallback((query: string): ActionSearchResult[] => {
     const q = query.trim();
     if (!q) return [];
 
@@ -179,9 +180,9 @@ export function useScenarioSearch() {
           target: htmlTagEscape(u.target),
         }) ?? "",
     }));
-  }
+  }, []);
 
-  function search(query: string) {
+  const search = useCallback((query: string) => {
     const unitHits = searchUnits(query);
     const equipmentHits = searchEquipmentItems(query);
     const actionHits = searchActions(query);
@@ -190,12 +191,10 @@ export function useScenarioSearch() {
       combineHits([unitHits, equipmentHits, actionHits]),
       "category",
     );
-  }
+  }, [searchUnits, searchEquipmentItems, searchActions]);
 
-  return {
-    search,
-    searchActions,
-    actionItems: actionItems.map(
+  const memoizedActionItems = useMemo(() => 
+    actionItems.map(
       (a): ActionSearchResult => ({
         ...a,
         id: a.action,
@@ -203,7 +202,12 @@ export function useScenarioSearch() {
         score: 0,
         highlight: "",
       }),
-    ),
+    ), []);
+
+  return {
+    search,
+    searchActions,
+    actionItems: memoizedActionItems,
   };
 }
 

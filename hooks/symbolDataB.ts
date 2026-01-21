@@ -38,9 +38,16 @@ export function useSymbologyData() {
   const [symbology, setSymbology] = useState<NormalizedNode[] | undefined>(
     cachedSymbology,
   );
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(!!cachedSymbology);
 
   const loadData = useCallback(async () => {
+    // Nếu đã cache và standard không đổi thì không cần load lại
+    if (cachedSymbology && cachedStandard === symbologyStandard) {
+      setSymbology(cachedSymbology);
+      setIsLoaded(true);
+      return;
+    }
+
     setIsLoaded(false);
 
     try {
@@ -57,14 +64,17 @@ export function useSymbologyData() {
         cachedSymbology = normalizeRevB(ms2525c);
         cachedStandard = "MILSTD_2525C";
       } else {
-        toast.warning("Symbology Standard not recognized");
-        throw new Error("Symbology Standard not recognized");
+        // Fallback hoặc báo lỗi, không throw tránh crash UI
+        console.warn("Symbology Standard not recognized or missing");
       }
 
-      setSymbology(cachedSymbology);
-      setIsLoaded(true);
+      if (cachedSymbology) {
+        setSymbology(cachedSymbology);
+        setIsLoaded(true);
+      }
     } catch (e) {
       console.error(e);
+      toast.error("Failed to load symbology data");
     }
   }, [normalizeRevB, symbologyStandard]);
 
@@ -158,7 +168,7 @@ function useSymbolValues(sidc: string) {
 
 export function useSymbolItems(sidc: string) {
   const symbolValues = useSymbolValues(sidc);
-  const { symbology, isLoaded, loadData, currentSymbologyStandard } =
+  const { symbology, isLoaded, loadData, currentSymbologyStandard } = 
     useSymbologyData();
 
   const {
@@ -170,6 +180,66 @@ export function useSymbolItems(sidc: string) {
     modifier1Value,
     modifier2Value,
   } = symbolValues;
+
+  // define helper functions to identify symbol types
+
+  const isGroundUnit = useCallback(() => {
+    return (
+      codingSchemeValue === "S" &&
+      battleDimensionValue === "G" &&
+      (functionIdValue[0] === "U" || functionIdValue[0] === "-")
+    );
+  }, [codingSchemeValue, battleDimensionValue, functionIdValue]);
+
+  const isGroundEquipment = useCallback(() => {
+    return battleDimensionValue === "G" && functionIdValue[0] === "E";
+  }, [battleDimensionValue, functionIdValue]);
+
+  const isGroundInstallation = useCallback(() => {
+    return battleDimensionValue === "G" && functionIdValue[0] === "I";
+  }, [battleDimensionValue, functionIdValue]);
+
+  const isSeaSurface = useCallback(() => {
+    return codingSchemeValue === "S" && battleDimensionValue === "S";
+  }, [codingSchemeValue, battleDimensionValue]);
+
+  const isSeaSubsurface = useCallback(() => {
+    return codingSchemeValue === "S" && battleDimensionValue === "U";
+  }, [codingSchemeValue, battleDimensionValue]);
+
+  const isGraphics = useCallback(() => {
+    return codingSchemeValue === "G";
+  }, [codingSchemeValue]);
+
+  const isGraphicsCommandAndControl = useCallback(() => {
+    return (
+      codingSchemeValue === "G" &&
+      battleDimensionValue === "G" &&
+      functionIdValue[0] === "G"
+    );
+  }, [codingSchemeValue, battleDimensionValue, functionIdValue]);
+
+  const isSigIntGround = useCallback(() => {
+    return (
+      codingSchemeValue === "I" &&
+      battleDimensionValue === "G" &&
+      functionIdValue[0] === "S"
+    );
+  }, [codingSchemeValue, battleDimensionValue, functionIdValue]);
+
+  const isStabOpNonMilGroup = useCallback(() => {
+    return (
+      codingSchemeValue === "O" &&
+      battleDimensionValue === "G" &&
+      functionIdValue[0] === "A"
+    );
+  }, [codingSchemeValue, battleDimensionValue, functionIdValue]);
+
+  const isSOF = useCallback(() => {
+    return codingSchemeValue === "S" && battleDimensionValue === "F";
+  }, [codingSchemeValue, battleDimensionValue]);
+
+  // Tính toán symbol item
 
   const battleDimensionItems = useMemo<SymbolItem[]>(() => {
     if (!symbology) return [];
@@ -209,6 +279,7 @@ export function useSymbolItems(sidc: string) {
     affiliationValue,
     battleDimensionValue,
     functionIdValue,
+    isGroundInstallation,
   ]);
 
   const echelonItems = useMemo<SymbolItem[]>(() => {
@@ -242,6 +313,12 @@ export function useSymbolItems(sidc: string) {
     statusValue,
     functionIdValue,
     modifier1Value,
+    isGroundUnit,
+    isSOF,
+    isGroundEquipment,
+    isGroundInstallation,
+    isSeaSurface,
+    isSeaSubsurface,
   ]);
 
   const hqtfdItems = useMemo<SymbolItem[]>(() => {
@@ -278,39 +355,89 @@ export function useSymbolItems(sidc: string) {
     functionIdValue,
     modifier1Value,
     modifier2Value,
+    isGroundEquipment,
+    isGroundInstallation,
+    isSeaSurface,
+    isSeaSubsurface,
+    isGraphics,
   ]);
 
-  function isGroundUnit() {
-    return (
-      codingSchemeValue === "S" &&
-      battleDimensionValue === "G" &&
-      (functionIdValue[0] === "U" || functionIdValue[0] === "-")
-    );
-  }
+  // Main Icon Items Logic 
+  const mainIconItems = useMemo<SymbolItem[]>(() => {
+    if (!isLoaded || !symbology) return [];
 
-  function isGroundEquipment() {
-    return battleDimensionValue === "G" && functionIdValue[0] === "E";
-  }
+    const addedNodes = new Set<string>();
+    const result: SymbolItem[] = [];
 
-  function isGroundInstallation() {
-    return battleDimensionValue === "G" && functionIdValue[0] === "I";
-  }
+    for (const node of symbology) {
+      if (node.battledimension !== battleDimensionValue) continue;
+      if (node.codingscheme !== codingSchemeValue) continue;
 
-  function isSeaSurface() {
-    return codingSchemeValue === "S" && battleDimensionValue === "S";
-  }
+      // Filter based on Ground unit logic
+      if (isGroundUnit() && node.functionid[0] !== "U") continue;
+      if (isGroundEquipment() && node.functionid[0] !== "E") continue;
+      if (isGroundInstallation() && node.functionid[0] !== "I") continue;
 
-  function isSeaSubsurface() {
-    return codingSchemeValue === "S" && battleDimensionValue === "U";
-  }
+      // Filter duplicate keys
+      if (addedNodes.has(node.functionid)) continue;
+      addedNodes.add(node.functionid);
 
-  function isGraphics() {
-    return codingSchemeValue === "G";
-  }
+      let names = node.names?.filter(Boolean) || [];
 
-  function isSOF() {
-    return codingSchemeValue === "S" && battleDimensionValue === "F";
-  }
+      // Logic tách tên entity/type/subtype từ mảng names
+      const [entity, entityType, entitySubtype] =
+        names.length >= 3
+          ? [names[names.length - 3], names[names.length - 2], names[names.length - 1]]
+          : [names[names.length - 2], names[names.length - 1], null];
+
+      let text = entity;
+      if (entityType) text += " - " + entityType;
+      if (entitySubtype) text += " - " + entitySubtype;
+
+      const checkString =
+        codingSchemeValue +
+        "*" +
+        battleDimensionValue +
+        "*" +
+        node.functionid +
+        modifier1Value +
+        modifier2Value +
+        "---";
+        
+      if (checkString === "G*C*OXAH-------") continue;
+
+      result.push({
+        code: node.functionid,
+        sidc:
+          codingSchemeValue +
+          affiliationValue +
+          battleDimensionValue +
+          statusValue +
+          node.functionid +
+          modifier1Value +
+          modifier2Value +
+          "---",
+        text: text,
+        entity: entity,
+        entityType: entityType,
+        entitySubtype: entitySubtype || undefined,
+      });
+    }
+
+    return result;
+  }, [
+    isLoaded,
+    symbology,
+    battleDimensionValue,
+    codingSchemeValue,
+    affiliationValue,
+    statusValue,
+    modifier1Value,
+    modifier2Value,
+    isGroundUnit,
+    isGroundEquipment,
+    isGroundInstallation,
+  ]);
 
   return {
     ...symbolValues,
@@ -318,7 +445,19 @@ export function useSymbolItems(sidc: string) {
     statusItems,
     echelonItems,
     hqtfdItems,
+    mainIconItems, 
     isLoaded,
     loadData,
+    // Helpers
+    isGroundUnit,
+    isGroundEquipment,
+    isGroundInstallation,
+    isSeaSurface,
+    isSeaSubsurface,
+    isGraphics,
+    isGraphicsCommandAndControl,
+    isSigIntGround, 
+    isStabOpNonMilGroup, 
+    isSOF,
   };
 }
