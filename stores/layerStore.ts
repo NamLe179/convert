@@ -16,6 +16,7 @@ interface LayerState {
   setSideLayers: (scenario: MilitaryScenario) => void;
   addLayer: (layerId: string) => void;
   removeLayer: (layerId: string) => void;
+  toggleLayer: (layerId: string) => void;
   clearLayers: () => void;
   
   setShowIconAnchors: (show: boolean) => void;
@@ -60,6 +61,17 @@ export const useLayerStore = create<LayerState>()(
         set((state) => {
           const newLayers = new Set(state.layers);
           newLayers.delete(layerId);
+          return { layers: newLayers };
+        }),
+      
+      toggleLayer: (layerId) =>
+        set((state) => {
+          const newLayers = new Set(state.layers);
+          if (newLayers.has(layerId)) {
+            newLayers.delete(layerId);
+          } else {
+            newLayers.add(layerId);
+          }
           return { layers: newLayers };
         }),
       

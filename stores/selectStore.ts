@@ -7,8 +7,14 @@ function isUnitOrEquipment(item: any): item is Unit | EquipmentItem {
   return item && (item instanceof Unit || item instanceof EquipmentItem);
 }
 
-// Create unallocated federate
-export const UNALLOCATED_FEDERATE: Federate = Federate.fromModel({ name: "Unallocated" });
+// sửa lỗi tránh bị lỗi DOMParser
+let _unallocatedFederate: Federate | null = null;
+export function getUnallocatedFederate(): Federate {
+  if (!_unallocatedFederate && typeof window !== 'undefined') {
+    _unallocatedFederate = Federate.fromModel({ name: "Unallocated" });
+  }
+  return _unallocatedFederate!;
+}
 
 interface SelectState {
   activeItem: Unit | EquipmentItem | ForceSide | null;
@@ -77,7 +83,7 @@ export const useSelectStore = create<SelectState>((set, get) => ({
   clearActiveFederate: () => set({ activeFederate: null }),
   
   openFederatesPanel: () => {
-    set({ activeFederate: UNALLOCATED_FEDERATE, activeItem: null });
+    set({ activeFederate: getUnallocatedFederate(), activeItem: null });
     eventBus.emit(MSDL_EDITOR_EVENT, "selected-federate");
   },
 }));
